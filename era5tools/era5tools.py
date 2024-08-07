@@ -229,7 +229,8 @@ class ERA5():
                   if int(fname.split('_')[1][:4]) in years]
 
         # Generate combined DataArray for all months for this variable
-        ds = xr.concat([self.convert(xr.open_dataset(fpath, engine='cfgrib'),
+        ds = xr.concat([self.convert(xr.open_dataset(fpath, engine='cfgrib',
+                                                     backend_kwargs={'indexpath':''}),
                                      vname=vname, lat_range=lat_range,
                                      lon_range=lon_range) for fpath in fpaths],
                                      dim='time').sortby('time')
