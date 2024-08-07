@@ -293,6 +293,11 @@ class ERA5():
             if clim is not None and not os.path.exists(out_fpath):
                 clim.to_zarr(out_fpath)
 
+        # Update self.clims_available
+        self.clims_available = sorted([f.split('.')[0]
+                                       for f in os.listdir(self.climpath)
+                                       if 'zarr' in f and not f.startswith('.')])
+
     def load_clim(self, vname, year_range):
         """Load precomputed climatology.
 
