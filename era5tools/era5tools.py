@@ -339,7 +339,10 @@ class ERA5():
         for year_range_clim, df in clims.groupby(['year_from','year_to']):
             clim = self.load_clim(vname, year_range_clim)
             data = self.proc(inpath, vname, (df.index.min(), df.index.max()))
-            anoms.append(data - clim)
+            if data is None:
+                pass
+            else:
+                anoms.append(data - clim)
         return xr.concat(anoms, dim='year')
 
 
