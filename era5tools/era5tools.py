@@ -31,7 +31,7 @@ class ERA5():
         self.climpath = os.path.join(os.path.dirname(__file__), 'clims')
         self.clims_available = sorted([f.split('.')[0]
                                        for f in os.listdir(self.climpath)
-                                       if not f.startswith('.')])
+                                       if 'zarr' in f and not f.startswith('.')])
         self.clim = None
 
         # Need a Copernicus Data Store Beta (CDS-Beta) API key
@@ -224,6 +224,14 @@ class ERA5():
         years = range(year_range[0], year_range[1]+1)
         fnames = [fname for fname in os.listdir(inpath)
                   if vname in fname and 'grib' in fname and 'idx' not in fname]
+        # Check if all years requested are available in fnames
+        years_fnames = [int(fname.split('_')[1][:4]) for fname in fnames]
+        years_missing = set(years) - set(years_fnames)
+        if len(years_missing) > 0:
+            print(f'Warning: some years in year_range not in {inpath}:\n'
+                  f'{", ".join(map(str, years_missing))}')
+            return None
+
         # Filename template {vname}_{year}.grib or {vname}_{year}_{month}.grib
         fpaths = [os.path.join(inpath, fname) for fname in fnames
                   if int(fname.split('_')[1][:4]) in years]
@@ -237,9 +245,10 @@ class ERA5():
         return ds if not to_monthly else self._to_monthly(ds)
 
     def calc_clim(self, inpath, vname, year_range):
-        """Calculate climatology for all months.
+        """Calculate a single climatology for a year range.
 
-        Assumes time dimension converted to [year, month].
+        Takes the average over all grid locations and months over the
+        year_range passed. Assumes time dimension converted to [year, month].
 
         Parameters
         ----------
@@ -255,10 +264,34 @@ class ERA5():
             ds : xarray.Dataset
                 Climatology Dataset.
         """
-        return self.proc(inpath, vname, year_range
-                         ).mean(dim='year'
-                                ).assign_attrs(desc=f'{vname} climatology',
-                                               clim_range=year_range)
+        data = self.proc(inpath, vname, year_range)
+        if data is not None:
+            return data.mean(dim='year'
+                             ).assign_attrs(desc=f'{vname} climatology',
+                                            clim_range=year_range)
+        else:
+            return None
+
+    def calc_clims(self, inpath, vname, year_range):
+        """Calculate multiple climatologies for all years in a year range.
+
+        Calculates NOAA 30-year centred climatologies in 5-year chunks and saves
+        in self.climpath. Assumes the time dimension converted to [year, month].
+
+        Parameters
+        ----------
+            inpath : str
+                Input path to raw download data.
+            vname : str
+                Variable name (internal).
+            year_range : (int, int)
+                Year range to process.
+        """
+        for year_from, year_to in climperiods.clims(*year_range).drop_duplicates().values:
+            clim = self.calc_clim(inpath, vname, (year_from, year_to))
+            out_fpath = os.path.join(self.climpath, f'{vname}_{year_from}_{year_to}.zarr')
+            if clim is not None and not os.path.exists(out_fpath):
+                clim.to_zarr(out_fpath)
 
     def load_clim(self, vname, year_range):
         """Load precomputed climatology.
